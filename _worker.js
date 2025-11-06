@@ -1,6 +1,6 @@
-﻿import { connect } from "cloudflare:sockets";
+import { connect } from "cloudflare:sockets";
 let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {};
-let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*.loadshare.org'];
+let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const Pages静态页面 = 'https://edt-pages.github.io';
 const KEEPALIVE = 15000, STALL_TIMEOUT = 8000, MAX_STALL = 12, MAX_RECONNECT = 24;
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
@@ -17,8 +17,8 @@ export default {
         const 访问IP = request.headers.get('X-Real-IP') || request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || request.headers.get('True-Client-IP') || request.headers.get('Fly-Client-IP') || request.headers.get('X-Appengine-Remote-Addr') || request.headers.get('X-Forwarded-For') || request.headers.get('X-Real-IP') || request.headers.get('X-Cluster-Client-IP') || request.cf?.clientTcpRtt || '未知IP';
         if (env.GO2SOCKS5) SOCKS5白名单 = await 整理成数组(env.GO2SOCKS5);
         if (!upgradeHeader || upgradeHeader !== 'websocket') {
-            if (!管理员密码) return fetch(Pages静态页面 + '/noADMIN').then(r => new Response(r.body, { status: 404, statusText: r.statusText, headers: r.headers }));
-            if (!env.KV) return fetch(Pages静态页面 + '/noKV').then(r => new Response(r.body, { status: 404, statusText: r.statusText, headers: r.headers }));
+            if (!管理员密码) return fetch(Pages静态页面 + '/noADMIN').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
+            if (!env.KV) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
             const 访问路径 = url.pathname.slice(1).toLowerCase();
             const 区分大小写访问路径 = url.pathname.slice(1);
             if (访问路径 === 加密秘钥 && 加密秘钥 !== '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改') {//快速订阅
@@ -144,20 +144,7 @@ export default {
                     } else if (区分大小写访问路径 === 'admin/ADD.txt') { // 保存自定义优选IP
                         try {
                             const customIPs = await request.text();
-                            // 验证格式（简单验证）
-                            const lines = customIPs.trim().split('\n').filter(line => line.trim());
-                            const validLines = lines.filter(line => {
-                                // 基本格式验证：IP[:端口][#备注]
-                                const regex = /^(\[[\da-fA-F:]+\]|[\d.]+)(?::(\d+))?(?:#(.+))?$/;
-                                return regex.test(line.trim());
-                            });
-
-                            if (validLines.length === 0 && lines.length > 0) {
-                                return new Response(JSON.stringify({ error: 'IP格式不正确，请检查格式' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                            }
-
-                            // 保存到 KV
-                            await env.KV.put('ADD.txt', customIPs);
+                            await env.KV.put('ADD.txt', customIPs);// 保存到 KV
                             await 请求日志记录(env, request, 访问IP, 'Save_Custom_IPs', config_JSON);
                             return new Response(JSON.stringify({ success: true, message: '自定义IP已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                         } catch (error) {
@@ -194,8 +181,8 @@ export default {
                     const UD = Math.floor(((now - today.getTime()) / 86400000) * 24 * 1099511627776 / 2);
                     let pagesSum = UD, workersSum = UD, total = 24 * 1099511627776;
                     if (config_JSON.CF.Usage.success) {
-                        pagesSum = config_JSON.CF.Usage.pages_sum;
-                        workersSum = config_JSON.CF.Usage.workers_sum;
+                        pagesSum = config_JSON.CF.Usage.pages;
+                        workersSum = config_JSON.CF.Usage.workers;
                         total = 1024 * 100;
                     }
                     const responseHeaders = {
@@ -214,13 +201,15 @@ export default {
                                 ? 'clash'
                                 : url.searchParams.has('sb') || url.searchParams.has('singbox') || ua.includes('singbox') || ua.includes('sing-box')
                                     ? 'singbox'
-                                    : 'mixed';
+                                    : url.searchParams.has('surge') || ua.includes('surge')
+                                        ? 'surge&ver=4'
+                                        : 'mixed';
 
                     if (!ua.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
-
+                    const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;
                     let 订阅内容 = '';
                     if (订阅类型 === 'mixed') {
-                        if (config_JSON.优选订阅生成.local) { // 本地生成订阅
+                        if (!url.searchParams.has('sub') && config_JSON.优选订阅生成.local) { // 本地生成订阅
                             const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量))[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量))[0];
                             const 优选API = [], 优选IP = [];
                             for (const 元素 of 完整优选列表) {
@@ -230,15 +219,18 @@ export default {
                             const 优选API的IP = await 请求优选API(优选API);
                             const 完整优选IP = [...new Set(优选IP.concat(优选API的IP))];
                             订阅内容 = 完整优选IP.map(原始地址 => {
-                                // 统一正则: 匹配 IPv4/IPv6地址 + 可选端口 + 可选备注
-                                // 示例: 166.0.188.128:443#Los Angeles 或 [2606:4700::]#CMCC 或 166.0.188.128
-                                const regex = /^(\[[\da-fA-F:]+\]|[\d.]+)(?::(\d+))?(?:#(.+))?$/;
+                                // 统一正则: 匹配 域名/IPv4/IPv6地址 + 可选端口 + 可选备注
+                                // 示例: 
+                                //   - 域名: hj.xmm1993.top:2096#备注 或 example.com
+                                //   - IPv4: 166.0.188.128:443#Los Angeles 或 166.0.188.128
+                                //   - IPv6: [2606:4700::]:443#CMCC 或 [2606:4700::]
+                                const regex = /^(\[[\da-fA-F:]+\]|[\d.]+|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::(\d+))?(?:#(.+))?$/;
                                 const match = 原始地址.match(regex);
 
                                 let 节点地址, 节点端口 = "443", 节点备注;
 
                                 if (match) {
-                                    节点地址 = match[1];  // IP地址(可能带方括号)
+                                    节点地址 = match[1];  // IP地址或域名(可能带方括号)
                                     节点端口 = match[2] || "443";  // 端口,默认443
                                     节点备注 = match[3] || 节点地址;  // 备注,默认为地址本身
                                 } else {
@@ -247,13 +239,13 @@ export default {
                                     节点备注 = 原始地址;
                                 }
 
-                                return `${config_JSON.协议类型}://${config_JSON.UUID}@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=${config_JSON.HOST}&sni=${config_JSON.HOST}&path=${encodeURIComponent(config_JSON.PATH)}&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
+                                return `${协议类型}://${config_JSON.UUID}@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=${config_JSON.HOST}&sni=${config_JSON.HOST}&path=${encodeURIComponent(config_JSON.PATH)}&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                             }).join('\n');
                             订阅内容 = btoa(订阅内容);
                         } else { // 优选订阅生成器
                             let 优选订阅生成器HOST = url.searchParams.get('sub') || config_JSON.优选订阅生成.SUB;
                             优选订阅生成器HOST = 优选订阅生成器HOST && !/^https?:\/\//i.test(优选订阅生成器HOST) ? `https://${优选订阅生成器HOST}` : 优选订阅生成器HOST;
-                            const 优选订阅生成器URL = `${优选订阅生成器HOST}/sub?host=example.com&${config_JSON.协议类型 === ('v' + 'le' + 'ss') ? 'uuid' : 'pw'}=00000000-0000-4000-0000-000000000000&path=${encodeURIComponent(config_JSON.PATH)}&type=${config_JSON.传输协议}`;
+                            const 优选订阅生成器URL = `${优选订阅生成器HOST}/sub?host=example.com&${协议类型 === ('v' + 'le' + 'ss') ? 'uuid' : 'pw'}=00000000-0000-4000-0000-000000000000&path=${encodeURIComponent(config_JSON.PATH)}&type=${config_JSON.传输协议}`;
                             try {
                                 const response = await fetch(优选订阅生成器URL, { headers: { 'User-Agent': 'v2rayN/edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' } });
                                 if (response.ok) 订阅内容 = await response.text();
@@ -266,8 +258,10 @@ export default {
                         const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN) + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : '')}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
                         try {
                             const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
-                            if (response.ok) 订阅内容 = await response.text();
-                            else return new Response('订阅转换后端异常：' + response.statusText, { status: response.status });
+                            if (response.ok) {
+                                订阅内容 = await response.text();
+                                if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = surge(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON);
+                            } else return new Response('订阅转换后端异常：' + response.statusText, { status: response.status });
                         } catch (error) {
                             return new Response('订阅转换后端异常：' + error.message, { status: 403 });
                         }
@@ -312,25 +306,44 @@ function handleConnection(ws, request, FIXED_UUID) {
     let socket, writer, reader, info;
     let isFirstMsg = true, bytesReceived = 0, stallCount = 0, reconnectCount = 0;
     let lastData = Date.now();
+    let udpStreamWrite = null, isDns = false;
     const timers = {};
     const dataBuffer = [];
     const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
     async function 处理魏烈思握手(data) {
         const bytes = new Uint8Array(data);
+        const 协议版本 = new Uint8Array([bytes[0], 0]);
         ws.send(new Uint8Array([bytes[0], 0]));
         if (Array.from(bytes.slice(1, 17)).map(n => n.toString(16).padStart(2, '0')).join('').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5') !== FIXED_UUID) throw new Error('Auth failed');
         const offset1 = 18 + bytes[17] + 1;
-        const port = (bytes[offset1] << 8) | bytes[offset1 + 1];
-        const addrType = bytes[offset1 + 2];
-        const offset2 = offset1 + 3;
+        const command = bytes[offset1];
+        const port = (bytes[offset1 + 1] << 8) | bytes[offset1 + 2];
+        const addrType = bytes[offset1 + 3];
+        const offset2 = offset1 + 4;
         const { host, length } = parseAddress(bytes, offset2, addrType === 1 ? 1 : addrType === 2 ? 2 : 4);
         const payload = bytes.slice(length);
         if (host.includes(atob('c3BlZWQuY2xvdWRmbGFyZS5jb20='))) throw new Error('Access');
+
+        // 判断是否为UDP命令(0x02)
+        const isUDP = command === 2;
+        if (isUDP) {
+            if (port === 53) {
+                isDns = true;
+                const 魏烈思响应头 = new Uint8Array([协议版本[0], 0]);
+                const { write } = await handleUDPOutBound(ws, 魏烈思响应头);
+                udpStreamWrite = write;
+                udpStreamWrite(payload);
+                return { socket: null, writer: null, reader: null, info: { host, port, isUDP: true } };
+            } else {
+                throw new Error('UDP proxy only enable for DNS which is port 53');
+            }
+        }
+
         const sock = await createConnection(host, port);
         await sock.opened;
         const w = sock.writable.getWriter();
         if (payload.length) await w.write(payload);
-        return { socket: sock, writer: w, reader: sock.readable.getReader(), info: { host, port } };
+        return { socket: sock, writer: w, reader: sock.readable.getReader(), info: { host, port, isUDP: false } };
     }
 
     async function 处理木马握手(data) {
@@ -340,19 +353,44 @@ function handleConnection(ws, request, FIXED_UUID) {
 
         const socks5Data = bytes.slice(58);
         if (socks5Data.byteLength < 6) throw new Error("invalid SOCKS5 request data");
-        if (socks5Data[0] !== 1) throw new Error("unsupported command, only TCP (CONNECT) is allowed");
+
+        const command = socks5Data[0];
+        // 0x01 TCP (CONNECT)
+        // 0x02 UDP
+        const isUDP = command === 2;
+
+        if (command !== 1 && command !== 2) {
+            throw new Error(`unsupported command ${command}, only TCP (CONNECT) and UDP are allowed`);
+        }
 
         const { host, length } = parseAddress(socks5Data, 2, socks5Data[1]);
         if (!host) throw new Error(`address is empty, addressType is ${socks5Data[1]}`);
         if (host.includes(atob('c3BlZWQuY2xvdWRmbGFyZS5jb20='))) throw new Error('Access');
 
         const port = (socks5Data[length] << 8) | socks5Data[length + 1];
+        const payload = socks5Data.slice(length + 4);
+
+        // 处理UDP DNS请求
+        if (isUDP) {
+            if (port === 53) {
+                isDns = true;
+                // 木马协议不需要响应头,直接传入空数组
+                const 木马响应头 = new Uint8Array(0);
+                const { write } = await handleUDPOutBound(ws, 木马响应头);
+                udpStreamWrite = write;
+                if (payload.length) udpStreamWrite(payload);
+                return { socket: null, writer: null, reader: null, info: { host, port, isUDP: true } };
+            } else {
+                throw new Error('UDP proxy only enable for DNS which is port 53');
+            }
+        }
+
+        // 处理TCP连接
         const sock = await createConnection(host, port);
         await sock.opened;
         const w = sock.writable.getWriter();
-        const payload = socks5Data.slice(length + 4);
         if (payload.length) await w.write(payload);
-        return { socket: sock, writer: w, reader: sock.readable.getReader(), info: { host, port } };
+        return { socket: sock, writer: w, reader: sock.readable.getReader(), info: { host, port, isUDP: false } };
     }
 
     async function createConnection(host, port) {
@@ -519,11 +557,18 @@ function handleConnection(ws, request, FIXED_UUID) {
                 const bytes = new Uint8Array(firstData);
                 if (bytes.byteLength >= 58 && bytes[56] === 0x0d && bytes[57] === 0x0a) ({ socket, writer, reader, info } = await 处理木马握手(firstData));
                 else ({ socket, writer, reader, info } = await 处理魏烈思握手(firstData));
-                startTimers();
-                readLoop();
+
+                // 如果是DNS UDP请求，不需要启动定时器和读取循环
+                if (!isDns) {
+                    startTimers();
+                    readLoop();
+                }
             } else {
                 lastData = Date.now();
-                if (socket && writer) {
+                // 处理UDP DNS数据
+                if (isDns && udpStreamWrite) {
+                    await udpStreamWrite(evt.data);
+                } else if (socket && writer) {
                     await writer.write(evt.data);
                 } else {
                     dataBuffer.push(evt.data);
@@ -568,6 +613,62 @@ function parseAddress(bytes, offset, addrType) {
     }
     return { host, length: endOffset };
 }
+
+const WS_READY_STATE_OPEN = 1;
+async function handleUDPOutBound(webSocket, 协议响应头) {
+    let 响应头已发送 = false;
+    const transformStream = new TransformStream({
+        start(controller) { },
+        transform(chunk, controller) {
+            // UDP消息前2字节是UDP数据的长度
+            for (let index = 0; index < chunk.byteLength;) {
+                const lengthBuffer = chunk.slice(index, index + 2);
+                const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
+                const udpData = new Uint8Array(
+                    chunk.slice(index + 2, index + 2 + udpPacketLength)
+                );
+                index = index + 2 + udpPacketLength;
+                controller.enqueue(udpData);
+            }
+        },
+        flush(controller) { }
+    });
+
+    // 处理DNS UDP查询
+    transformStream.readable.pipeTo(new WritableStream({
+        async write(chunk) {
+            const resp = await fetch('https://1.1.1.1/dns-query', {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/dns-message',
+                },
+                body: chunk,
+            });
+            const dnsQueryResult = await resp.arrayBuffer();
+            const udpSize = dnsQueryResult.byteLength;
+            const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
+
+            if (webSocket.readyState === WS_READY_STATE_OPEN) {
+                console.log(`DoH success and dns message length is ${udpSize}`);
+                if (响应头已发送) {
+                    webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+                } else {
+                    webSocket.send(await new Blob([协议响应头, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+                    响应头已发送 = true;
+                }
+            }
+        }
+    })).catch((error) => {
+        console.error('DNS UDP has error:', error);
+    });
+    const writer = transformStream.writable.getWriter();
+    return {
+        write(chunk) {
+            writer.write(chunk);
+        }
+    };
+}
+
 ////////////////////////////////SOCKS5/HTTP函数///////////////////////////////////////////////
 async function httpConnect(addressRemote, portRemote) {
     const { username, password, hostname, port } = parsedSocks5Address;
@@ -655,6 +756,30 @@ async function socks5Connect(targetHost, targetPort) {
 }
 
 //////////////////////////////////////////////////功能性函数///////////////////////////////////////////////
+function surge(content, url, config_JSON) {
+    let 每行内容;
+    if (content.includes('\r\n')) {
+        每行内容 = content.split('\r\n');
+    } else {
+        每行内容 = content.split('\n');
+    }
+
+    let 输出内容 = "";
+    for (let x of 每行内容) {
+        if (x.includes('= tro' + 'jan,')) {
+            console.log(x);
+            const host = x.split("sni=")[1].split(",")[0];
+            const 备改内容 = `sni=${host}, skip-cert-verify=${config_JSON.跳过证书验证}`;
+            const 正确内容 = `sni=${host}, skip-cert-verify=${config_JSON.跳过证书验证}, ws=true, ws-path=${config_JSON.PATH}, ws-headers=Host:"${host}"`;
+            输出内容 += x.replace(new RegExp(备改内容, 'g'), 正确内容).replace("[", "").replace("]", "") + '\n';
+        } else {
+            输出内容 += x + '\n';
+        }
+    }
+
+    输出内容 = `#!MANAGED-CONFIG ${url} interval=${config_JSON.优选订阅生成.SUBUpdateTime * 60 * 60} strict=false` + 输出内容.substring(输出内容.indexOf('\n'));
+    return 输出内容;
+}
 async function 请求日志记录(env, request, 访问IP, 请求类型 = "Get_SUB", config_JSON) {
     const KV容量限制 = 4;//MB
     try {
@@ -874,7 +999,7 @@ async function 生成随机IP(request, count = 16) {
     return [randomIPs, randomIPs.join('\n')];
 }
 async function 整理成数组(内容) {
-    var 替换后的内容 = 内容.replace(/[	|"'\r\n]+/g, ',').replace(/,+/g, ',');
+    var 替换后的内容 = 内容.replace(/[	"'\r\n]+/g, ',').replace(/,+/g, ',');
     if (替换后的内容.charAt(0) == ',') 替换后的内容 = 替换后的内容.slice(1);
     if (替换后的内容.charAt(替换后的内容.length - 1) == ',') 替换后的内容 = 替换后的内容.slice(0, 替换后的内容.length - 1);
     const 地址数组 = 替换后的内容.split(',');
